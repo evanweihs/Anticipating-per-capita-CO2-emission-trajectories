@@ -2,9 +2,9 @@
 # Main script
 # ============================================================
 
-from data_loader.py import load_data()
+from src.data_loader.py import load_data()
 
-from models import (
+from src.models import (
     run_pca_standardized,
     run_kmeans_pca,
     run_random_forest,
@@ -12,7 +12,7 @@ from models import (
     run_future_projection
 )
 
-from evaluation import (
+from src.evaluation import (
     eval_model,
     plot_rf_gb_comparison,
     plot_residuals,
