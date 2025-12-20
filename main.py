@@ -2,7 +2,7 @@
 # Main script
 # ============================================================
 
-from src.data_loader import load_data()
+from src.data_loader import load_data
 
 from src.models import (
     run_pca_standardized,
