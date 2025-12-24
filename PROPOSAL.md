@@ -1,7 +1,6 @@
 # Project Proposal
 
-## Title
-Anticipating per Capita CO₂ Emission Trajectories
+## Anticipating per Capita CO₂ Emission Trajectories
 
 ## Motivation
 Reducing carbon dioxide (CO₂) emissions is a central objective of climate policy.
