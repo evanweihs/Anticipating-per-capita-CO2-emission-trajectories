@@ -34,7 +34,9 @@ The pipeline is fully reproducible and implemented in **Python**, following a mo
   - Energy consumption by source (coal, oil, gas, nuclear, renewables)
 - **World Bank / Maddison Project**  
   - GDP per capita
-
+- **World Bank / Maddison Project**
+  - World Population Prospects
+  
 ### Key variables
 - `co2_per_capita`
 - `gdp_per_capita`
