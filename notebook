@@ -1,1 +1,674 @@
+# ==============================
+# 0. Imports & global parameters
+# ==============================
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import (
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score,
+    classification_report,
+    confusion_matrix)
+from sklearn.model_selection import train_test_split
+
+RANDOM_STATE = 42
+EPSILON = 0.02  # tolerance threshold (2%)
+
+
+# =================================
+# 1. Data loading & preprocessing
+# =================================
+
+import pandas as pd
+#Open files
+energy_per_capita= pd.read_csv("/files/Project-DS/DATA/RAW/energy_per_capita.csv")
+energy=energy_per_capita
+co_per_capita = pd.read_csv("/files/Project-DS/DATA/RAW/co-emissions-per-capita.csv")
+co=co_per_capita
+gdp_per_capita = pd.read_csv("/files/Project-DS/DATA/RAW/PIB-Habitant.csv")
+population_raw = pd.read_csv("/files/Project-DS/DATA/RAW/population-raw.csv")
+pop= population_raw
+pop= pop.drop(columns=["Population - Sex: all - Age: all - Variant: medium"])
+
+# We reshape the GDP dataset from wide format to long format to match de colonn 
+gdp_long = pd.melt(
+    gdp_per_capita,
+    id_vars=["Country Name", "Country Code", "Indicator Name", "Indicator Code"],
+    var_name="Year",
+    value_name="gdp_per_capita")
+# We drop rows without a valid country name.
+gdp_long = gdp_long.dropna(subset=["Country Name"])
+# We convert the Year column from string to integer.
+gdp_long["Year"] = gdp_long["Year"].astype(int)
+# We sort the dataset alphabetically by country, then by year.
+gdp_long = gdp_long.sort_values(by=["Country Name", "Year"])
+# We reset the index after sorting the dataset.
+gdp_long = gdp_long.reset_index(drop=True)
+# We rename the dataframe to a shorter and cleaner name.
+gdp = gdp_long.copy()
+gdp = gdp.drop(columns=["Indicator Name", "Indicator Code"])
+
+# We rename the key columns to have the same structure across datasets
+co = co.rename(columns={
+    "Entity": "Country",
+    "Code": "ISO3",
+    "Annual CO₂ emissions (per capita)": "co2_per_capita"})
+energy=energy.rename(columns={
+    "Entity": "Country",
+    "Code": "ISO3",
+    "Coal per capita (kWh)": "Coal",
+    "Oil per capita (kWh)": "Oil",
+    "Gas per capita (kWh)": "Gas",
+    "Nuclear per capita (kWh - equivalent)": "Nuclear",
+    "Hydro per capita (kWh - equivalent)": "Hydro",
+    "Wind per capita (kWh - equivalent)": "Wind",
+    "Solar per capita (kWh - equivalent)": "Solar",
+    "Other renewables per capita (kWh - equivalent)": "Other"})
+pop = pop.rename(columns={
+    "Entity": "Country",
+    "Code": "ISO3",
+    "Population - Sex: all - Age: all - Variant: estimates": "population"})
+gdp = gdp.rename(columns={
+    "Country Name": "Country",
+    "Country Code": "ISO3",
+   })
+
+# We keep only observations between 2000 and 2023.
+co = co[(co['Year'] >= 2000) & (co['Year'] <= 2023)]
+pop= pop[(pop['Year'] >= 2000) & (pop['Year'] <= 2023)]
+energy = energy[(energy['Year'] >= 2000) & (energy['Year'] <= 2023)]
+gdp = gdp[(gdp['Year'] >= 2000) & (gdp['Year'] <= 2023)]
+
+#We change the name to have only one language in the dataframe
+mapping_pays = {
+    "Afghanistan": "Afghanistan",
+    "Afrique du Sud": "South Africa",
+    "Albanie": "Albania",
+    "Algérie": "Algeria",
+    "Allemagne": "Germany",
+    "Andorre": "Andorra",
+    "Angola": "Angola",
+    "Antigua-et-Barbuda": "Antigua and Barbuda",
+    "Arabie saoudite": "Saudi Arabia",
+    "Argentine": "Argentina",
+    "Arménie": "Armenia",
+    "Australie": "Australia",
+    "Autriche": "Austria",
+    "Azerbaïdjan": "Azerbaijan",
+
+    "Bahamas": "Bahamas",
+    "Bahreïn": "Bahrain",
+    "Bangladesh": "Bangladesh",
+    "Barbade": "Barbados",
+    "Belgique": "Belgium",
+    "Belize": "Belize",
+    "Bénin": "Benin",
+    "Bhoutan": "Bhutan",
+    "Biélorussie": "Belarus",
+    "Birmanie": "Myanmar",
+    "Bolivie": "Bolivia",
+    "Bosnie-Herzégovine": "Bosnia and Herzegovina",
+    "Botswana": "Botswana",
+    "Brésil": "Brazil",
+    "Brunei": "Brunei",
+    "Bulgarie": "Bulgaria",
+    "Burkina Faso": "Burkina Faso",
+    "Burundi": "Burundi",
+
+    "Cambodge": "Cambodia",
+    "Cameroun": "Cameroon",
+    "Canada": "Canada",
+    "Cap-Vert": "Cape Verde",
+    "Chili": "Chile",
+    "Chine": "China",
+    "Chypre": "Cyprus",
+    "Colombie": "Colombia",
+    "Comores": "Comoros",
+    "Congo (Rép. dém.)": "Democratic Republic of Congo",
+    "Congo (Rép.)": "Congo",
+    "Corée du Nord": "North Korea",
+    "Corée du Sud": "South Korea",
+    "Costa Rica": "Costa Rica",
+    "Côte d'Ivoire": "Ivory Coast",
+    "Croatie": "Croatia",
+    "Cuba": "Cuba",
+
+    "Danemark": "Denmark",
+    "Djibouti": "Djibouti",
+    "Dominique": "Dominica",
+
+    "Égypte": "Egypt",
+    "Émirats arabes unis": "United Arab Emirates",
+    "Équateur": "Ecuador",
+    "Érythrée": "Eritrea",
+    "Espagne": "Spain",
+    "Estonie": "Estonia",
+    "États-Unis": "United States",
+    "Éthiopie": "Ethiopia",
+
+    "Fidji": "Fiji",
+    "Finlande": "Finland",
+    "France": "France",
+
+    "Gabon": "Gabon",
+    "Gambie": "Gambia",
+    "Géorgie": "Georgia",
+    "Ghana": "Ghana",
+    "Grèce": "Greece",
+    "Grenade": "Grenada",
+    "Guatemala": "Guatemala",
+    "Guinée": "Guinea",
+    "Guinée-Bissau": "Guinea-Bissau",
+    "Guinée équatoriale": "Equatorial Guinea",
+    "Guyana": "Guyana",
+
+    "Haïti": "Haiti",
+    "Honduras": "Honduras",
+    "Hongrie": "Hungary",
+
+    "Inde": "India",
+    "Indonésie": "Indonesia",
+    "Irak": "Iraq",
+    "Iran": "Iran",
+    "Irlande": "Ireland",
+    "Islande": "Iceland",
+    "Israël": "Israel",
+    "Italie": "Italy",
+
+    "Jamaïque": "Jamaica",
+    "Japon": "Japan",
+    "Jordanie": "Jordan",
+
+    "Kazakhstan": "Kazakhstan",
+    "Kenya": "Kenya",
+    "Kirghizistan": "Kyrgyzstan",
+    "Kiribati": "Kiribati",
+    "Koweït": "Kuwait",
+
+    "Laos": "Laos",
+    "Lesotho": "Lesotho",
+    "Lettonie": "Latvia",
+    "Liban": "Lebanon",
+    "Liberia": "Liberia",
+    "Libye": "Libya",
+    "Liechtenstein": "Liechtenstein",
+    "Lituanie": "Lithuania",
+    "Luxembourg": "Luxembourg",
+
+    "Madagascar": "Madagascar",
+    "Malaisie": "Malaysia",
+    "Malawi": "Malawi",
+    "Maldives": "Maldives",
+    "Mali": "Mali",
+    "Malte": "Malta",
+    "Maroc": "Morocco",
+    "Maurice": "Mauritius",
+    "Mauritanie": "Mauritania",
+    "Mexique": "Mexico",
+    "Micronésie": "Micronesia",
+    "Moldavie": "Moldova",
+    "Monaco": "Monaco",
+    "Mongolie": "Mongolia",
+    "Monténégro": "Montenegro",
+    "Mozambique": "Mozambique",
+
+    "Namibie": "Namibia",
+    "Nauru": "Nauru",
+    "Népal": "Nepal",
+    "Nicaragua": "Nicaragua",
+    "Niger": "Niger",
+    "Nigéria": "Nigeria",
+    "Norvège": "Norway",
+    "Nouvelle-Zélande": "New Zealand",
+
+    "Oman": "Oman",
+    "Ouganda": "Uganda",
+    "Ouzbékistan": "Uzbekistan",
+
+    "Pakistan": "Pakistan",
+    "Palaos": "Palau",
+    "Panama": "Panama",
+    "Papouasie-Nouvelle-Guinée": "Papua New Guinea",
+    "Paraguay": "Paraguay",
+    "Pays-Bas": "Netherlands",
+    "Pérou": "Peru",
+    "Philippines": "Philippines",
+    "Pologne": "Poland",
+    "Portugal": "Portugal",
+
+    "Qatar": "Qatar",
+
+    "République centrafricaine": "Central African Republic",
+    "République tchèque": "Czechia",
+    "Roumanie": "Romania",
+    "Royaume-Uni": "United Kingdom",
+    "Russie": "Russia",
+    "Fédération de Russie": "Russia",
+
+    "Rwanda": "Rwanda",
+
+    "Saint-Kitts-et-Nevis": "Saint Kitts and Nevis",
+    "Saint-Vincent-et-les-Grenadines": "Saint Vincent and the Grenadines",
+    "Sainte-Lucie": "Saint Lucia",
+    "Salomon": "Solomon Islands",
+    "Salvador": "El Salvador",
+    "Samoa": "Samoa",
+    "Sao Tomé-et-Principe": "Sao Tome and Principe",
+    "Sénégal": "Senegal",
+    "Serbie": "Serbia",
+    "Seychelles": "Seychelles",
+    "Sierra Leone": "Sierra Leone",
+    "Singapour": "Singapore",
+    "Slovaquie": "Slovakia",
+    "Slovénie": "Slovenia",
+    "Somalie": "Somalia",
+    "Soudan": "Sudan",
+    "Soudan du Sud": "South Sudan",
+    "Sri Lanka": "Sri Lanka",
+    "Suède": "Sweden",
+    "Suisse": "Switzerland",
+    "Suriname": "Suriname",
+    "Syrie": "Syria",
+    "Tadjikistan": "Tajikistan",
+    "Tanzanie": "Tanzania",
+    "Tchad": "Chad",
+    "Thaïlande": "Thailand",
+    "Timor oriental": "Timor-Leste",
+    "Togo": "Togo",
+    "Tonga": "Tonga",
+    "Trinité-et-Tobago": "Trinidad and Tobago",
+    "Tunisie": "Tunisia",
+    "Turkménistan": "Turkmenistan",
+    "Turquie": "Turkey",
+    "Ukraine": "Ukraine",
+    "Uruguay": "Uruguay",
+    "Uzbekistan": "Uzbekistan",
+    "Vanuatu": "Vanuatu",
+    "Vatican": "Vatican",
+    "Venezuela": "Venezuela",
+    "Vietnam": "Vietnam",
+    "Yémen": "Yemen",
+    "Zambie": "Zambia",
+    "Zimbabwe": "Zimbabwe"}
+co["Country"] = co["Country"].replace(mapping_pays)
+pop["Country"] = pop["Country"].replace(mapping_pays)
+energy["Country"] = energy["Country"].replace(mapping_pays)
+gdp["Country"] = gdp["Country"].replace(mapping_pays)
+
+#Create one DF
+df_final = pd.merge(co, pop, on=["Country", "ISO3", "Year"], how="inner")
+df_final = pd.merge(df_final, gdp, on=["Country", "ISO3", "Year"], how="inner")
+df_final = pd.merge(df_final, energy, on=["Country", "ISO3", "Year"], how="inner")
+#need to drop the pop for the pca beacause too much variation between 
+df_final = df_final.drop(columns=["population"])
+pays_a_garder = [
+    "South Africa","Nigeria","Morocco","Kenya","Germany","France",
+    "United Kingdom","Sweden","Poland","China","India",
+    "Russia","Japan","Indonesia","United States","Canada","Mexico","Dominican Republic",
+    "Cuba","Brazil","Argentina","Chile","Colombia","Peru","Australia","New Zealand","Papua New Guinea","Fiji","Samoa"]
+df_final = df_final[df_final["Country"].isin(pays_a_garder)]
+df_final.to_csv("/files/Project-DS/DATA/Data_Clean/df_final.csv", index=False)
+
+#Mean of co2 per country
+co2_mean_country = (df_final.groupby("Country")["co2_per_capita"].mean().reset_index())
+co2_mean_country.to_csv("/files/Project-DS/DATA/Data_Clean/co2_mean_country.csv", index=False)
+
+#=====================
+#2 PCA Standardise
+#=====================
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+#Import the Clean DF
+df_final= pd.read_csv("/files/Project-DS/DATA/Data_Clean/df_final.csv")
+#1.Selection of featurs
+features = [ "co2_per_capita","gdp_per_capita","Coal", "Oil", "Gas","Nuclear", "Hydro", "Wind", "Solar", "Other"]
+df_pca = df_final.dropna(subset=features).copy()
+X = df_pca[features].values
+#2.standardization
+mu = X.mean(axis=0)
+sigma = X.std(axis=0)
+X_standardized = (X - mu) / sigma
+#3.Covariance matrix
+m = X_standardized.shape[0]
+C = (1/m) * np.dot(X_standardized.T, X_standardized)
+#4.Eigen decomposition
+eigvals, eigvecs = np.linalg.eig(C)
+# Sort eigenvalues decreasing
+idx = np.argsort(eigvals)[::-1]
+eigvals = eigvals[idx]
+eigvecs = eigvecs[:, idx]
+# 5.Reduce to 2 principal components
+U_reduce = eigvecs[:, :2]
+#6.Projection Z = X U_reduce
+Z = np.dot(X_standardized, U_reduce)
+df_pca["PC1"] = Z[:, 0]
+df_pca["PC2"] = Z[:, 1]
+df_pca["Country"] = df_final.loc[df_pca.index, "Country"].values
+df_pca_mean = df_pca.groupby("Country")[["PC1","PC2"]].mean().reset_index()
+#7.Plot PCA
+plt.figure(figsize=(10, 7))
+plt.scatter(df_pca["PC1"], df_pca["PC2"], alpha=0.6)
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.title("PCA (standardized) computed from scratch")
+plt.grid(True)
+plt.savefig("PCA (standardized) computed from scratch", dpi=300, bbox_inches="tight")
+plt.show()
+#8.Variance explained
+explained = eigvals[:2] / eigvals.sum()
+print("Variance explained by PC1 and PC2:", explained)
+
+#calculate mean per country during 2000-2023
+df_pca_mean = df_pca.groupby("Country")[["PC1", "PC2"]].mean().reset_index()
+plt.figure(figsize=(9,6))
+plt.scatter(df_pca_mean["PC1"], df_pca_mean["PC2"], s=80)
+for i in range(len(df_pca_mean)):
+    plt.text(df_pca_mean["PC1"][i], df_pca_mean["PC2"][i], df_pca_mean["Country"][i], fontsize=10)
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.title("PCA (un point par pays, moyenne 2000–2023)")
+plt.grid(True)
+#save for Latex import
+plt.savefig("Kmean cluster", dpi=300, bbox_inches="tight")
+plt.show()
+
+#=================================
+# 3. Exploratory clustering (PCA + K-Means)
+# =================================
+# Objective:
+# Identify groups of countries with similar CO2 / energy / income profiles.
+# This section is exploratory only and NOT used for prediction.
+#Import the DF
+df_final= pd.read_csv("/files/Project-DS/DATA/Data_Clean/df_final.csv")
+df_pca_mean = pd.read_csv("/files/Project-DS/PCA_S/df_pca_mean.csv")
+co2_mean_country= pd.read_csv("/files/Project-DS/DATA/Data_Clean/co2_mean_country.csv")
+
+
+#choose how many groups we want 
+kmeans = KMeans( n_clusters=3,random_state=42)
+#Train the model 
+df_pca_mean["cluster"]= kmeans.fit_predict( df_pca_mean [["PC1", "PC2"]])
+df_pca_mean = df_pca_mean.merge(co2_mean_country, on="Country", how="left")
+#Visualtisation of the cluster 
+plt.figure(figsize=(12, 8))
+plt.scatter(
+    df_pca_mean["PC1"],
+    df_pca_mean["PC2"],
+    c=df_pca_mean["cluster"],
+    s=80)
+
+for i in range(len(df_pca_mean)):
+    plt.text(
+        df_pca_mean["PC1"].iloc[i],
+        df_pca_mean["PC2"].iloc[i],
+        df_pca_mean["Country"].iloc[i],
+        fontsize=9)
+
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.title("K-means clustering on PCA (PC1 vs PC2)")
+plt.grid(True)
+plt.savefig("Kmean cluster", dpi=300, bbox_inches="tight")
+plt.show()
+
+#1.trajectoire annuelle de chaque pays
+df_pca = pd.read_csv("/files/Project-DS/PCA_S/df_pca.csv")
+kmeans = KMeans(n_clusters=3, random_state=42)
+df_pca['cluster'] = kmeans.fit_predict(df_pca[['PC1', 'PC2']])
+
+df_country = (df_pca
+    .groupby('Country')
+    .agg(co2_mean=('co2_per_capita', 'mean'),cluster_mode=('cluster', lambda x: x.mode()[0]))
+    .reset_index())
+# Classement des clusters selon le niveau moyen de CO2 :
+cluster_order = (
+    df_country
+    .groupby('cluster_mode')['co2_mean']
+    .mean()
+    .sort_values())
+
+cluster_order
+
+#2.Mapping non arbitraire & jout de la catégorie finale à la table pays
+cluster_mapping = {
+    cluster_order.index[0]: 'Low CO2',
+    cluster_order.index[1]: 'Medium CO2',
+    cluster_order.index[2]: 'High CO2'}
+df_country['co2_group'] = df_country['cluster_mode'].map(cluster_mapping)
+df_country.sort_values('co2_mean').head(50)
+
+
+# =================================================
+# 4. Supervised learning: Random Forest model
+# =================================================
+df_final= pd.read_csv("/files/Project-DS/DATA/Data_Clean/df_final.csv")
+# 1. Target variable
+y = df_final["co2_per_capita"]
+
+# 2. Feature matrix
+features = [ "gdp_per_capita", "Coal", "Oil", "Gas","Nuclear", "Hydro", "Wind", "Solar", "Other"]
+X = df_final[features]
+
+X.shape
+y.shape
+
+# 3. Random Forest Regressor
+rf = RandomForestRegressor(
+    n_estimators=500,
+    max_depth=None,
+    random_state=42)
+# 4. Entraînement SUR TOUT
+rf.fit(X, y)
+
+# 5. Prédiction SUR LE MÊME X
+df_final["co2_pred_rf"] = rf.predict(X)
+print(df_final)
+
+# Mean per country (RF)
+
+# 1) Table RF (pays–année) avec les bonnes colonnes
+df_rf_pred = df_final[["Country","ISO3","co2_per_capita","co2_pred_rf"]].copy()
+
+# 2) Renommer la vraie valeur
+df_rf_pred = df_rf_pred.rename(columns={"co2_per_capita": "y_true"})
+
+# 3) Moyenne par pays
+df_rf_country_mean = (
+    df_rf_pred
+    .groupby(["Country", "ISO3"], as_index=False)
+    .agg({"y_true": "mean","co2_pred_rf": "mean"}))
+
+df_rf_country_mean.head(25)
+df_rf_country_mean.to_csv("/files/Project-DS/RF/df_rf_country_mean.csv", index=False)
+
+# =================================================
+# 4.1 Boosted random forest
+# ================================================= 
+df_gb_pred = df_final[["Country","ISO3","Year","co2_per_capita",]].copy()
+df_gb_pred = df_gb_pred.rename(columns={"co2_per_capita": "y_true","co2_pred_gb": "y_pred_gb"})
+
+#Cleaning Strings
+energy_cols = ["Coal", "Oil", "Gas","Nuclear", "Hydro","Wind", "Solar", "Other"]
+df_final[energy_cols] = df_final[energy_cols].fillna(0)
+df_final = df_final.dropna().reset_index(drop=True)
+df_num = df_final.drop(["Country", "ISO3"], axis=1)
+X = df_num.drop("co2_per_capita", axis=1)
+y = df_num["co2_per_capita"]
+
+gb = GradientBoostingRegressor(n_estimators=500,learning_rate=0.05,max_depth=3,random_state=42)
+gb.fit(X, y)
+
+df_final["co2_pred_gb"] = gb.predict(X)
+
+#Mean per country 
+df_gb_country_mean = (df_final.groupby(["Country", "ISO3"], as_index=False).agg(y_true=("co2_per_capita", "mean"),y_pred_gb=("co2_pred_gb","mean")))
+df_gb_country_mean = df_gb_country_mean.rename(columns={"y_true": "co2_per_capita", "y_pred_gb": "co2_predicted"})
+df_gb_country_mean = df_gb_country_mean[["Country", "ISO3", "co2_per_capita", "co2_predicted"]]
+df_gb_country_mean.head(25)
+df_gb_country_mean.to_csv("/files/Project-DS/RF/df_gb_country_mean.csv", index=False)
+
+# One table with RF and GB 
+df_results_rf_gb_mean = (df_final.groupby(["Country", "ISO3"], as_index=False).agg(
+        y_true=("co2_per_capita", "mean"),
+        y_pred_rf=("co2_pred_rf", "mean"),
+        y_pred_gb=("co2_pred_gb", "mean") ))
+print(df_results_rf_gb_mean)
+df_results_rf_gb_mean.head(6)
+df_table=df_results_rf_gb_mean.head(6)
+df_table.to_csv("/files/Project-DS/RF/df_table.csv", index=False)
+
+# =================================================
+# 5. Future projection of CO2 emissions
+# =================================================
+df_final= pd.read_csv("/files/Project-DS/DATA/Data_Clean/df_final.csv")
+#Création des variables retardées (LAGS)
+df_ml = df_final.sort_values(["ISO3", "Year"]).copy()
+lag_vars = ["co2_per_capita","gdp_per_capita","Coal", "Oil", "Gas","Nuclear", "Hydro", "Wind", "Solar", "Other"]
+for var in lag_vars:
+    df_ml[f"{var}_lag1"] = (
+        df_ml
+        .groupby("ISO3")[var]
+        .shift(1))
+
+# On garde uniquement les lignes exploitables
+df_ml = df_ml.dropna(subset=[f"{v}_lag1" for v in lag_vars])
+
+#definition of x and y
+features_lag = ["co2_per_capita_lag1","gdp_per_capita_lag1","Coal_lag1", "Oil_lag1", "Gas_lag1","Nuclear_lag1", "Hydro_lag1", "Wind_lag1", "Solar_lag1", "Other_lag1"]
+X = df_ml[features_lag]
+y = df_ml["co2_per_capita"]
+
+#SPLIT TEMPOREL STRICT (clé du projet)
+train = df_ml[df_ml["Year"] <= 2018]
+val   = df_ml[(df_ml["Year"] >= 2019) & (df_ml["Year"] <= 2021)]
+test  = df_ml[df_ml["Year"] >= 2022]
+
+X_train, y_train = train[features_lag], train["co2_per_capita"]
+X_val,   y_val   = val[features_lag],   val["co2_per_capita"]
+X_test,  y_test  = test[features_lag],  test["co2_per_capita"]
+
+rf = RandomForestRegressor(n_estimators=500, min_samples_leaf=2,random_state=42,n_jobs=-1)
+rf.fit(X_train, y_train)
+
+def eval_model(y_true, y_pred, label):
+    print(label)
+    print("RMSE:", np.sqrt(mean_squared_error(y_true, y_pred)))
+    print("MAE :", mean_absolute_error(y_true, y_pred))
+    print("R2  :", r2_score(y_true, y_pred))
+    print("-"*40)
+
+# Validation
+y_val_pred = rf.predict(X_val)
+eval_model(y_val, y_val_pred, "VALIDATION 2019–2021")
+
+# Test futur
+y_test_pred = rf.predict(X_test)
+eval_model(y_test, y_test_pred, "TEST FUTUR 2022–2023")
+
+#Projection future 2024–2030 (recursive, sans données futures)
+df_proj_base = df_final.sort_values(["ISO3", "Year"]).copy()
+# on prend la dernière année observée (normalement 2023) par pays
+last_obs = ( df_proj_base[df_proj_base["Year"] == 2023]
+    .set_index("ISO3")
+    [["Country", "co2_per_capita", "gdp_per_capita","Coal", "Oil", "Gas", "Nuclear", "Hydro", "Wind", "Solar", "Other"]] .copy())
+last_obs.head()
+#Boucle de projection itérative
+years_future = list(range(2024, 2031))
+results = []
+# état courant = dernière info connue
+state = last_obs.copy()
+for y in years_future:
+    # Construction des features lag1 (t-1)
+    X_y = pd.DataFrame({"co2_per_capita_lag1": state["co2_per_capita"],"gdp_per_capita_lag1": state["gdp_per_capita"],
+        "Coal_lag1": state["Coal"],
+        "Oil_lag1": state["Oil"],
+        "Gas_lag1": state["Gas"],
+        "Nuclear_lag1": state["Nuclear"],
+        "Hydro_lag1": state["Hydro"],
+        "Wind_lag1": state["Wind"],
+        "Solar_lag1": state["Solar"],
+        "Other_lag1": state["Other"], }, index=state.index)
+# On respecte EXACTEMENT l'ordre features_lag utilisé à l'entraînement
+    X_y = X_y[features_lag]
+# Prediction CO2(t)
+    co2_pred = rf.predict(X_y)
+# Stocker résultat
+    tmp = pd.DataFrame({"ISO3": state.index,"Country": state["Country"].values,"Year": y,"co2_pred": co2_pred})
+    results.append(tmp)
+# Mise à jour de l'état pour l'année suivante:
+# - co2 devient la valeur prédite
+# - gdp + énergie restent constants (hypothèse statu quo)
+    state = state.copy()
+    state["co2_per_capita"] = co2_pred
+df_forecast = pd.concat(results, ignore_index=True)
+df_forecast.head()
+
+#Tableau 
+# df_forecast: contient ISO3, Country, Year, co2_pred 
+
+# last_obs: table index=ISO3 avec les valeurs 2023 (créée juste avant la boucle de projection)
+# colonnes attendues : Country, co2_per_capita, gdp_per_capita, Coal, Oil, Gas, Nuclear, Hydro, Wind, Solar, Other
+
+vars_statu_quo = ["gdp_per_capita", "Coal", "Oil", "Gas", "Nuclear", "Hydro", "Wind", "Solar", "Other"]
+
+df_future = df_forecast.merge(
+    last_obs[vars_statu_quo].reset_index(),   # ISO3 redevient une colonne
+    on="ISO3",
+    how="left")
+
+# Renommer pour cohérence "future"
+df_future = df_future.rename(columns={"co2_pred": "co2_per_capita_pred"})
+
+#Table just CO2
+table_co2 = df_future.pivot_table(index="Country",columns="Year",values="co2_per_capita_pred").reset_index()
+
+table_co2.head(6)
+table_co2_fin=table_co2.head(6)
+table_co2_fin.to_csv("/files/Project-DS/Projection/table_co2_fin.csv", index=False)
+table_co2.head(6)
+
+#Tableau 
+# df_forecast: contient ISO3, Country, Year, co2_pred 
+
+# last_obs: table index=ISO3 avec les valeurs 2023 (créée juste avant la boucle de projection)
+# colonnes attendues : Country, co2_per_capita, gdp_per_capita, Coal, Oil, Gas, Nuclear, Hydro, Wind, Solar, Other
+
+vars_statu_quo = ["gdp_per_capita", "Coal", "Oil", "Gas", "Nuclear", "Hydro", "Wind", "Solar", "Other"]
+
+df_future = df_forecast.merge(
+    last_obs[vars_statu_quo].reset_index(),   # ISO3 redevient une colonne
+    on="ISO3",
+    how="left")
+
+# Renommer pour cohérence "future"
+df_future = df_future.rename(columns={"co2_pred": "co2_per_capita_pred"})
+
+#Table just CO2
+table_co2 = df_future.pivot_table(index="Country",columns="Year",values="co2_per_capita_pred").reset_index()
+
+table_co2.head(6)
+table_co2_fin=table_co2.head(6)
+table_co2_fin.to_csv("/files/Project-DS/Projection/table_co2_fin.csv", index=False)
+table_co2.head(6)
+plt.figure(figsize=(8,5))
+
+for c in levels["Medium emitters"]:
+    d = df_forecast[df_forecast["Country"] == c].sort_values("Year")
+    plt.plot(d["Year"], d["co2_pred"], label=c)
+
+plt.title("Medium CO$_2$ emitting countries (2024–2030)")
+plt.xlabel("Year")
+plt.ylabel("CO$_2$ per capita (predicted)")
+plt.legend(fontsize=6)
+plt.grid(True)
+plt.savefig("medium_emitters.png", dpi=300, bbox_inches="tight")
+plt.show()
