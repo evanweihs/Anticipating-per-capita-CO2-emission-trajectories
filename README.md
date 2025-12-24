@@ -14,7 +14,8 @@ The pipeline is fully reproducible and implemented in **Python**, following a mo
 
 ## Research Question
 
-> To what extent can machine learning models, based on historical economic wealth and energy structure, be used to explain and forecast per capita CO₂ emissions at the country level?
+> Can historical economic and energy data be used to anticipate future trajectories
+  of per capita CO₂ emissions at the country level?
 
 ---
 
