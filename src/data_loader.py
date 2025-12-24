@@ -165,8 +165,7 @@ def load_data():
         "United Kingdom", "Sweden", "Poland", "China", "India", "Russia",
         "Japan", "Indonesia", "United States", "Canada", "Mexico",
         "Brazil", "Argentina", "Chile", "Colombia", "Peru",
-        "Australia", "New Zealand"
-    ]
+        "Australia", "New Zealand"]
 
     df_final = df_final[df_final["Country"].isin(pays_a_garder)]
 
