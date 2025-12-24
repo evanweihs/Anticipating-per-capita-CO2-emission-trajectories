@@ -91,32 +91,32 @@ Evaluation is diagnostic only (no causal interpretation).
 ## Project Structure
 
 Anticipating-per-capita-CO2-emission-trajectories/
-├── main.py                  # Entry point (pipeline orchestration)
-├── environment.yml          # Reproducible Conda environment
+├── main.py                  
+├── environment.yml         
 │
 ├── data/
-│   ├── raw/                 # Raw input data
-│   └── clean/               # Cleaned datasets
+│   ├── raw/                
+│   └── clean/              
 │
 ├── src/
-│   ├── data_loader.py       # Data loading & preprocessing
-│   ├── evaluation.py        # Quantitative evaluation only
-│   ├── results.py           # Tables & figures (saved to /results)
+│   ├── data_loader.py       
+│   ├── evaluation.py       
+│   ├── results.py          
 │   │
 │   ├── models/
 │   │   ├── pca_standardized.py
 │   │   ├── kmean_pca.py
 │   │   ├── RF_GB.py
 │   │   ├── future_projection.py
-│   │   └── __init__.py      # REQUIRED (exports models)
+│   │   └── __init__.py     
 │   │
-│   └── __init__.py          # REQUIRED (marks src as a package)
+│   └── __init__.py          
 │
 ├── results/
-│   ├── tables/              # CSV outputs
-│   └── figures/             # PNG figures
+│   ├── tables/              
+│   └── figures/         
 │
-└── notebooks/               # (optional) exploratory notebooks
+└── notebooks/             
 
 
 
